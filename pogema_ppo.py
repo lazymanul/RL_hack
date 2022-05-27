@@ -13,14 +13,15 @@ eps_clip      = 0.1
 K_epoch       = 3
 T_horizon     = 20
 
+
 class PPO(nn.Module):
     def __init__(self, input_shape, num_actions):
         super(PPO, self).__init__()
         self.data = []
-        
-        self.fc1   = nn.Linear(input_shape,256)
-        self.fc_pi = nn.Linear(256,num_actions)
-        self.fc_v  = nn.Linear(256,1)
+        self.train_iter = 0        
+        self.fc1   = nn.Linear(input_shape, 256)
+        self.fc_pi = nn.Linear(256, num_actions)
+        self.fc_v  = nn.Linear(256, 1)
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
 
     def pi(self, x, softmax_dim = 0):
@@ -58,6 +59,11 @@ class PPO(nn.Module):
         
     def train_net(self):
         s, a, r, s_prime, done_mask, prob_a = self.make_batch()
+        
+        # self.train_iter += 1
+        # import pdb
+        # if self.train_iter % 20 == 0:
+        #     pdb.set_trace()
 
         for i in range(K_epoch):
             td_target = r + gamma * self.v(s_prime) * done_mask
@@ -83,78 +89,79 @@ class PPO(nn.Module):
             self.optimizer.zero_grad()
             loss.mean().backward()
             self.optimizer.step()
-            
-import gym
+
+
 from pogema.wrappers.multi_time_limit import MultiTimeLimit
 from pogema.animation import AnimationMonitor
-from IPython.display import SVG, display
 
-import pogema
 from pogema import GridConfig
 
-# Define random configuration
-grid_config = GridConfig(num_agents=1, # количество агентов на карте
-                         size=32,      # размеры карты
-                         density=0.3,  # плотность препятствий
-                         seed=1,       # сид генерации задания 
-                         max_episode_steps=256,  # максимальная длина эпизода
-                         obs_radius=5, # радиус обзора
-                        )
+if __name__ == "__main__":
 
-env = gym.make("Pogema-v0", grid_config=grid_config)
-env = AnimationMonitor(env)
+    # Define random configuration
+    grid_config = GridConfig(num_agents=1, # количество агентов на карте
+                             size=8,      # размеры карты
+                             density=0.3,  # плотность препятствий
+                             seed=1,       # сид генерации задания 
+                             max_episode_steps=256,  # максимальная длина эпизода
+                             obs_radius=5, # радиус обзора
+                            )
 
-# обновляем окружение
-obs = env.reset()
+    env = gym.make("Pogema-v0", grid_config=grid_config)
+    env = AnimationMonitor(env)
 
-model = PPO(obs[0].shape[0] * obs[0].shape[1] * obs[0].shape[2], env.action_space.n)
+    # обновляем окружение
+    obs = env.reset()
+
+    model = PPO(obs[0].shape[0] * obs[0].shape[1] * obs[0].shape[2], env.action_space.n)
 
 
-score = 0.0
-print_interval = 20
-iterations = 100
-min_play_reward = 50
+    score = 0.0
+    print_interval = 20
+    iterations = 200
+    min_play_reward = 50
 
-def play_game():
-    done = False
-    state = env.reset()    
-    while(not done): 
-        print(states_current)       
-        prob = model.pi(torch.from_numpy(states_current).float())
-        m = Categorical(prob)
-        a = m.sample().item()
-        s_prime, r, done, info = env.step(a)
-        env.render()
-        state = s_prime  
-
-for iteration in range(iterations):
-    states_current = env.reset()
-    dones = [False, ...]
-    while not all(dones):
-        for t in range(T_horizon):
-            #print(s)
-            s_current = states_current[0].flatten()
-            prob = model.pi(torch.from_numpy(s_current).float())            
+    def play_game():
+        done = False
+        state = env.reset()    
+        while(not done): 
+            print(states_current)       
+            prob = model.pi(torch.from_numpy(states_current).float())
             m = Categorical(prob)
             a = m.sample().item()
-            actions = [a]
-            states_next, rewards, dones, info = env.step(actions)
-            r = rewards[0] - 1
-            s_next = states_next[0].flatten()
-            model.put_data((s_current, a, r/100.0, s_next, prob[a].item(), dones[0]))
-            states_current = states_next
+            s_prime, r, done, info = env.step(a)
+            env.render()
+            state = s_prime  
 
-            score += r
-            if all(dones):
-                if score/print_interval > min_play_reward:
-                    play_game()
-                break
+    for iteration in range(iterations):
+        states_current = env.reset()
+        dones = [False, ...]
+        while not all(dones):
+            for t in range(T_horizon):
+                #print(s)
+                s_current = states_current[0].flatten()
+                prob = model.pi(torch.from_numpy(s_current).float())            
+                m = Categorical(prob)
+                a = m.sample().item()
+                actions = [a]
+                env.render()
+                states_next, rewards, dones, info = env.step(actions)
+                r = rewards[0] - 1
+                s_next = states_next[0].flatten()
+                model.put_data((s_current, a, r/100.0, s_next, prob[a].item(), dones[0]))
+                states_current = states_next
 
-        model.train_net()
+                score += r
+                if all(dones):
+                    if score/print_interval > min_play_reward:
+                        play_game()
+                    break
 
-    if iteration%print_interval==0 and iteration!=0:
-        print("# of episode :{}, avg score : {:.1f}".format(iteration, score/print_interval))
-        score = 0.0
+            model.train_net()
 
-env.close()
+        if iteration % print_interval == 0 and iteration != 0:
+            print("# of episode :{}, avg score : {:.1f}".format(iteration, score/print_interval))
+            score = 0.0
+
+    env.close()
 
