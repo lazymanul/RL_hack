@@ -120,6 +120,7 @@ class Model(nn.Module):
             for i in range(len(obs)):
                 self.h_outs.append([(torch.zeros([1, 1, 32], dtype=torch.float), 
                                 torch.zeros([1, 1, 32], dtype=torch.float))])
+            self.first_move = False
 
         actions = []
         for i in range(len(obs)):
