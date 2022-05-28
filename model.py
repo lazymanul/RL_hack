@@ -6,25 +6,31 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
-learning_rate = 0.0005
-gamma         = 0.98
-lmbda         = 0.95
-eps_clip      = 0.1
-K_epoch       = 3
-T_horizon     = 70
+
 
 class Model(nn.Module):
-    def __init__(self, input_shape=363, num_actions=5, load_weights=True):
+    def __init__(self):
         super(Model, self).__init__()
+        self.input_shape=363
+        self.num_actions=5
+        self.load_weights=True
+
+        self.learning_rate = 0.0005
+        self.gamma         = 0.98
+        self.lmbda         = 0.95
+        self.eps_clip      = 0.1
+        self.K_epoch       = 3
+        self.T_horizon     = 120
+
         self.data = []
              
-        self.fc1   = nn.Linear(input_shape, 256)
-        self.fc_pi = nn.Linear(256, num_actions)
+        self.fc1   = nn.Linear(self.input_shape, 256)
+        self.fc_pi = nn.Linear(256, self.num_actions)
         self.fc_v  = nn.Linear(256, 1)
-        self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+        self.optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
 
-        if load_weights:
-            self = torch.load("pogema_ppo_weights.h5")
+        if self.load_weights:
+            self.load_state_dict(torch.load("pogema_ppo_weights.h5"))
             self.eval()
 
 
@@ -63,16 +69,18 @@ class Model(nn.Module):
         
     def train_net(self):
         s, a, r, s_prime, done_mask, prob_a = self.make_batch()
-        
-        for i in range(K_epoch):
-            td_target = r + gamma * self.v(s_prime) * done_mask
+        if s.shape == (1, 0):
+            return
+
+        for i in range(self.K_epoch):            
+            td_target = r + self.gamma * self.v(s_prime) * done_mask
             delta = td_target - self.v(s)
             delta = delta.detach().numpy()
 
             advantage_lst = []
             advantage = 0.0
             for delta_t in delta[::-1]:
-                advantage = gamma * lmbda * advantage + delta_t[0]
+                advantage = self.gamma * self.lmbda * advantage + delta_t[0]
                 advantage_lst.append([advantage])
             advantage_lst.reverse()
             advantage = torch.tensor(advantage_lst, dtype=torch.float)
@@ -82,8 +90,8 @@ class Model(nn.Module):
             ratio = torch.exp(torch.log(pi_a) - torch.log(prob_a))  # a/b == exp(log(a)-log(b))
 
             surr1 = ratio * advantage
-            surr2 = torch.clamp(ratio, 1-eps_clip, 1+eps_clip) * advantage
-            loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s) , td_target.detach())
+            surr2 = torch.clamp(ratio, 1-self.eps_clip, 1+self.eps_clip) * advantage
+            loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s), td_target.detach())
 
             self.optimizer.zero_grad()
             loss.mean().backward()

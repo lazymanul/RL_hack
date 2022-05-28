@@ -9,8 +9,12 @@ from torch.distributions import Categorical
 
 
 class Model(nn.Module):
-    def __init__(self, input_shape=363, num_actions=5, load_weights=True):
+    def __init__(self):
         super(Model, self).__init__()
+        self.input_shape=363
+        self.num_actions=5
+        self.load_weights=False
+
         self.learning_rate = 0.0005
         self.gamma         = 0.98
         self.lmbda         = 0.95
@@ -20,13 +24,13 @@ class Model(nn.Module):
 
         self.data = []
              
-        self.fc1   = nn.Linear(input_shape, 256)
-        self.fc_pi = nn.Linear(256, num_actions)
+        self.fc1   = nn.Linear(self.input_shape, 256)
+        self.fc_pi = nn.Linear(256, self.num_actions)
         self.fc_v  = nn.Linear(256, 1)
         self.optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
 
-        if load_weights:
-            self = torch.load("pogema_ppo_weights.h5")
+        if self.load_weights:
+            self.load_state_dict(torch.load("pogema_ppo_weights.h5"))
             self.eval()
 
 
@@ -176,4 +180,4 @@ if __name__ == "__main__":
             score = 0.0
 
     env.close()
-    torch.save(model, "pogema_ppo_weights.h5")
+    torch.save(model.state_dict(), "pogema_ppo_weights.h5")
