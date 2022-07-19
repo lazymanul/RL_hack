@@ -1,5 +1,5 @@
-# RL_hack
-Khabarovsk RL hackathon soltions
+# Khabarovsk RL hackathon soltions
+## by team: The Humans
 
 model_ppo - our baseline
 
